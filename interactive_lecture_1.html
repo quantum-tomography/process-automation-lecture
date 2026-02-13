@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interactive Lecture Generator</title>
+  <style>
+    :root { --bg:#0b1220; --card:#111a2e; --text:#e7eefc; --muted:#a8b3cf; --accent:#4da3ff; --good:#3ddc97; --bad:#ff5c7a; }
+    *{ box-sizing:border-box; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body{ margin:0; background:linear-gradient(160deg,#081022,#0b1220); color:var(--text); }
+    header{ position:sticky; top:0; backdrop-filter: blur(10px); background:rgba(11,18,32,.7); border-bottom:1px solid rgba(255,255,255,.08); z-index:10; }
+    .wrap{ max-width:1000px; margin:0 auto; padding:18px 18px; }
+    .row{ display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+    .title{ font-weight:700; letter-spacing:.2px; }
+    .sub{ color:var(--muted); font-size:14px; }
+    .bar{ height:10px; background:rgba(255,255,255,.08); border-radius:999px; overflow:hidden; }
+    .bar > div{ height:100%; width:0%; background:linear-gradient(90deg,var(--accent),#7cc6ff); transition:width .25s ease; }
+    main{ padding:20px 0 60px; }
+    .card{ background:rgba(17,26,46,.85); border:1px solid rgba(255,255,255,.08); border-radius:18px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+    .cardPad{ padding:18px; }
+    .h1{ font-size:26px; margin:0 0 8px; }
+    .h2{ font-size:18px; margin:18px 0 10px; color:#d8e6ff; }
+    ul{ margin:10px 0 0 18px; color:var(--text); }
+    li{ margin:6px 0; }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:rgba(77,163,255,.12); border:1px solid rgba(77,163,255,.35); color:#cfe7ff; font-size:12px; }
+    .btns{ display:flex; gap:10px; flex-wrap:wrap; }
+    button{
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+      color:var(--text);
+      padding:10px 14px;
+      border-radius:12px;
+      cursor:pointer;
+      transition:transform .04s ease, background .15s ease;
+    }
+    button:hover{ background:rgba(255,255,255,.10); }
+    button:active{ transform:translateY(1px); }
+    button.primary{ background:rgba(77,163,255,.20); border-color:rgba(77,163,255,.55); }
+    button.primary:hover{ background:rgba(77,163,255,.28); }
+    button.good{ background:rgba(61,220,151,.18); border-color:rgba(61,220,151,.50); }
+    button.bad{ background:rgba(255,92,122,.16); border-color:rgba(255,92,122,.45); }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:14px; }
+    @media(min-width: 900px){ .grid{ grid-template-columns: 2fr 1fr; } }
+    .note{ color:var(--muted); font-size:14px; line-height:1.5; }
+    .quizOpt{ display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border-radius:14px; border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.04); margin:10px 0; }
+    .quizOpt input{ margin-top:3px; }
+    .feedback{ margin-top:10px; padding:10px 12px; border-radius:14px; border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.03); }
+    .feedback.good{ border-color: rgba(61,220,151,.55); background:rgba(61,220,151,.10); }
+    .feedback.bad{ border-color: rgba(255,92,122,.55); background:rgba(255,92,122,.08); }
+    .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; padding:2px 6px; border-radius:8px; border:1px solid rgba(255,255,255,.15); background:rgba(0,0,0,.18); }
+
+    /* Drag-sort items */
+    .dragItem{
+      user-select:none;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px dashed rgba(255,255,255,.20);
+      background:rgba(255,255,255,.04);
+      margin:8px 0;
+      cursor:grab;
+      touch-action:none; /* critical for phone Chrome */
+    }
+    .dragItem.dragging{ opacity:.55; }
+
+    /* Floating clone while dragging */
+    .dragGhost{
+      position:fixed;
+      z-index:99999;
+      pointer-events:none;
+      box-shadow:0 14px 40px rgba(0,0,0,.45);
+      opacity:.95;
+      cursor:grabbing;
+    }
+
+    .footerNav{ position:fixed; bottom:0; left:0; right:0; background:rgba(11,18,32,.75); border-top:1px solid rgba(255,255,255,.08); backdrop-filter: blur(10px); }
+    .footerNav .wrap{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="row">
+      <div>
+        <div class="title" id="courseTitle">Interactive Lecture</div>
+        <div class="sub" id="courseSub">Generated from lesson data</div>
+      </div>
+      <div class="pill">
+        <span id="slideCounter">1 / 1</span>
+        <span>•</span>
+        <span>Keys:</span> <span class="kbd">←</span> <span class="kbd">→</span>
+      </div>
+    </div>
+    <div style="margin-top:12px" class="bar"><div id="progressFill"></div></div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="grid">
+      <section class="card cardPad" id="slide"></section>
+      <aside class="card cardPad">
+        <div class="h2">Learning goals</div>
+        <ul id="goals"></ul>
+
+        <div class="h2">Quick actions</div>
+        <div class="btns">
+          <button id="btnReset" class="bad">Reset progress</button>
+          <button id="btnExport" class="primary">Export progress JSON</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<div class="footerNav">
+  <div class="wrap">
+    <div class="btns">
+      <button id="btnPrev">← Prev</button>
+      <button id="btnNext" class="primary">Next →</button>
+    </div>
+    <div class="sub" id="statusLine"></div>
+  </div>
+</div>
+
+<script>
+/** ---------------------------------------------------------
+ *  1) Lesson data (same content + 4 final quizzes)
+ *  --------------------------------------------------------- */
+const lessonData = {
+  courseTitle: "Process Automation & System Analysis",
+  courseSub: "Digital Transformation • Intro lecture (15–20 slides)",
+  learningGoals: [
+    "Define business processes and automation",
+    "Explain BPA vs RPA vs AI at a high level",
+    "Understand AS-IS / TO-BE thinking",
+    "Recognize benefits, risks, and typical tools",
+  ],
+  slides: [
+    { type:"content", title:"Welcome", bullets:[
+      "Course: Process Automation and System Analysis",
+      "Today: what automation is and why it matters in digital transformation",
+      "Outcome: describe BPA in simple terms"
+    ]},
+    { type:"content", title:"What is Digital Transformation?", bullets:[
+      "Integration of digital technologies into business operations",
+      "Changes how organizations deliver value",
+      "Requires cultural and organizational shift"
+    ]},
+    { type:"content", title:"What is a Business Process?", bullets:[
+      "Structured set of activities to achieve a goal",
+      "Involves people, systems, and data",
+      "Examples: order processing, payroll, approvals"
+    ]},
+    { type:"content", title:"Business Process Automation (BPA)", bullets:[
+      "Use of technology to automate complex processes",
+      "Reduces manual intervention",
+      "Improves efficiency and consistency"
+    ]},
+    { type:"content", title:"Why Do Organizations Need Automation?", bullets:[
+      "Reduce human error",
+      "Increase speed of operations",
+      "Lower operational costs",
+      "Improve customer experience"
+    ]},
+    { type:"content", title:"Manual vs Automated Process", bullets:[
+      "Manual: emails, spreadsheets, paper approvals",
+      "Automated: workflows, system-triggered actions",
+      "Automation ensures traceability and control"
+    ]},
+    { type:"content", title:"Types of Automation", bullets:[
+      "Task automation",
+      "Workflow automation",
+      "Enterprise-wide process automation"
+    ]},
+    { type:"content", title:"BPA vs RPA vs AI", bullets:[
+      "BPA: automates end-to-end processes",
+      "RPA: automates repetitive tasks (clicks/typing)",
+      "AI: enables intelligent decision-making"
+    ]},
+    { type:"content", title:"Core Components of Automation Systems", bullets:[
+      "Process modeling",
+      "Workflow engine",
+      "Business rules",
+      "Integration with IT systems"
+    ]},
+    { type:"content", title:"Process Modeling Basics", bullets:[
+      "Visual representation of processes",
+      "BPMN – Business Process Model and Notation",
+      "Helps identify bottlenecks and inefficiencies"
+    ]},
+    { type:"content", title:"Role of System Analysis", bullets:[
+      "Understand current process (AS-IS)",
+      "Design improved process (TO-BE)",
+      "Define system requirements",
+      "Evaluate performance metrics"
+    ]},
+
+    { type:"quiz", title:"Quick Check 1", prompt:"Which statement best describes BPA?",
+      options:[
+        "Automating any single repetitive task",
+        "Automating an end-to-end process with workflow and rules",
+        "Replacing all employees with robots",
+        "Only using AI chatbots to answer emails"
+      ],
+      answerIndex: 1,
+      explanation: "BPA focuses on the process as a whole (workflow + rules + integration), not just one task."
+    },
+
+    { type:"order", title:"Activity: Put the lifecycle in order",
+      prompt:"Drag items into a sensible order for improving a process:",
+      items:["Monitor & improve", "Automate / implement", "Model TO-BE", "Analyze AS-IS"],
+      correctOrder:["Analyze AS-IS", "Model TO-BE", "Automate / implement", "Monitor & improve"],
+      explanation:"System analysis starts with AS-IS, then TO-BE, implement, then monitor & improve."
+    },
+
+    { type:"content", title:"Benefits of BPA", bullets:[
+      "Efficiency and productivity",
+      "Scalability",
+      "Compliance and auditability",
+      "Better data visibility"
+    ]},
+    { type:"content", title:"Challenges and Risks", bullets:[
+      "Initial investment costs",
+      "Resistance to change",
+      "Poor process design",
+      "Over-automation"
+    ]},
+    { type:"content", title:"Real-World Examples", bullets:[
+      "Bank loan approval workflow",
+      "Hospital patient registration system",
+      "Logistics tracking and invoicing automation"
+    ]},
+    { type:"content", title:"Automation Platforms and Tools", bullets:[
+      "Microsoft Power Automate (workflow automation)",
+      "UiPath (RPA)",
+      "SAP workflow systems",
+      "Enterprise automation suites (category)"
+    ]},
+
+    { type:"quiz", title:"Quick Check 2", prompt:"A common automation mistake is:",
+      options:[
+        "Mapping the AS-IS process first",
+        "Defining KPIs and success criteria",
+        "Automating a broken process without redesign",
+        "Involving users and process owners"
+      ],
+      answerIndex: 2,
+      explanation: "If the process is broken, automation often makes the broken behavior happen faster."
+    },
+
+    { type:"content", title:"Summary", bullets:[
+      "Business Process Automation is key in digital transformation",
+      "Proper system analysis prevents ‘automating chaos’",
+      "Technology + process redesign = success"
+    ]},
+
+    /* -------------------- FINAL 4 QUICK CHECKS (one per learning goal) -------------------- */
+    { type:"quiz", title:"Final Check 1 (Goal: Definitions)", prompt:"Which is the best definition of a business process?",
+      options:[
+        "A random set of tasks done whenever needed",
+        "A repeatable sequence of activities that achieves a business goal",
+        "Only the software used inside a company",
+        "A single employee’s daily to-do list"
+      ],
+      answerIndex: 1,
+      explanation: "A business process is repeatable and goal-oriented, typically involving people, systems, rules, and data."
+    },
+
+    { type:"quiz", title:"Final Check 2 (Goal: BPA vs RPA vs AI)", prompt:"Which statement is most accurate?",
+      options:[
+        "RPA automates end-to-end processes using workflows and rules",
+        "BPA is mainly about mimicking user clicks in the UI",
+        "AI can support decisions, but BPA coordinates the process flow end-to-end",
+        "AI and BPA are the same thing"
+      ],
+      answerIndex: 2,
+      explanation: "BPA orchestrates the process (workflow/rules/integration). RPA mimics UI actions. AI adds intelligent decisions."
+    },
+
+    { type:"quiz", title:"Final Check 3 (Goal: AS-IS / TO-BE)", prompt:"What do AS-IS and TO-BE describe?",
+      options:[
+        "AS-IS = the target design; TO-BE = current problems",
+        "AS-IS = current process; TO-BE = improved future process",
+        "AS-IS = automation tool; TO-BE = AI tool",
+        "AS-IS = only the IT system; TO-BE = only the people"
+      ],
+      answerIndex: 1,
+      explanation: "AS-IS is how the process works now. TO-BE is the redesigned future state you want to achieve."
+    },
+
+    { type:"quiz", title:"Final Check 4 (Goal: Benefits/Risks/Tools)", prompt:"Which combination best matches real BPA practice?",
+      options:[
+        "Benefit: faster cycle time • Risk: resistance to change • Tool type: workflow automation platform",
+        "Benefit: fewer meetings • Risk: more paperwork • Tool type: video editor",
+        "Benefit: guaranteed perfect decisions • Risk: none • Tool type: any spreadsheet",
+        "Benefit: no need for requirements • Risk: too much success • Tool type: only AI chatbots"
+      ],
+      answerIndex: 0,
+      explanation: "Typical benefits include speed/quality/compliance; risks include change resistance and bad design; common tools include workflow platforms and RPA."
+    },
+  ]
+};
+
+/** ---------------------------------------------------------
+ *  2) Runtime state
+ *  --------------------------------------------------------- */
+const stateKey = "interactiveLectureState_v6";
+let state = loadState() || { idx:0, quiz:{}, order:{}, startedAt:new Date().toISOString() };
+
+const $ = (sel) => document.querySelector(sel);
+function saveState(){ localStorage.setItem(stateKey, JSON.stringify(state)); }
+function loadState(){ try { return JSON.parse(localStorage.getItem(stateKey)); } catch { return null; } }
+function resetState(){
+  localStorage.removeItem(stateKey);
+  state = { idx:0, quiz:{}, order:{}, startedAt:new Date().toISOString() };
+  render();
+}
+
+/** ---------------------------------------------------------
+ *  3) Rendering
+ *  --------------------------------------------------------- */
+function render(){
+  $("#courseTitle").textContent = lessonData.courseTitle;
+  $("#courseSub").textContent = lessonData.courseSub;
+
+  const goalsEl = $("#goals");
+  goalsEl.innerHTML = "";
+  for(const g of lessonData.learningGoals){
+    const li = document.createElement("li");
+    li.textContent = g;
+    goalsEl.appendChild(li);
+  }
+
+  const slides = lessonData.slides;
+  state.idx = Math.max(0, Math.min(state.idx, slides.length - 1));
+
+  $("#slideCounter").textContent = `${state.idx + 1} / ${slides.length}`;
+  $("#progressFill").style.width = `${((state.idx + 1) / slides.length) * 100}%`;
+
+  $("#btnPrev").disabled = state.idx === 0;
+  $("#btnNext").disabled = state.idx === slides.length - 1;
+
+  const slide = slides[state.idx];
+  const slideEl = $("#slide");
+  slideEl.innerHTML = "";
+
+  const h = document.createElement("h1");
+  h.className = "h1";
+  h.textContent = slide.title;
+  slideEl.appendChild(h);
+
+  if(slide.type === "content"){
+    const ul = document.createElement("ul");
+    slide.bullets.forEach(b => {
+      const li = document.createElement("li");
+      li.textContent = b;
+      ul.appendChild(li);
+    });
+    slideEl.appendChild(ul);
+    $("#statusLine").textContent = "Use ← → or buttons to navigate.";
+  }
+
+  if(slide.type === "quiz") renderQuiz(slideEl, slide);
+  if(slide.type === "order") renderOrder(slideEl, slide);
+
+  saveState();
+}
+
+function renderQuiz(slideEl, slide){
+  const p = document.createElement("p");
+  p.className = "note";
+  p.textContent = slide.prompt;
+  slideEl.appendChild(p);
+
+  const saved = state.quiz[state.idx] || {};
+  const form = document.createElement("div");
+
+  slide.options.forEach((opt, i) => {
+    const row = document.createElement("label");
+    row.className = "quizOpt";
+
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "quiz";
+    input.value = i;
+    input.checked = (saved.selectedIndex === i);
+
+    const span = document.createElement("div");
+    span.textContent = opt;
+
+    row.appendChild(input);
+    row.appendChild(span);
+    form.appendChild(row);
+
+    input.addEventListener("change", () => {
+      state.quiz[state.idx] = { selectedIndex:i, correct:(i === slide.answerIndex) };
+      render();
+    });
+  });
+
+  slideEl.appendChild(form);
+
+  if(saved.selectedIndex !== undefined){
+    const fb = document.createElement("div");
+    fb.className = "feedback " + (saved.correct ? "good" : "bad");
+    fb.innerHTML = saved.correct ? `✅ Correct. ${slide.explanation}` : `❌ Not quite. ${slide.explanation}`;
+    slideEl.appendChild(fb);
+    $("#statusLine").textContent = saved.correct ? "Quiz: correct ✅" : "Quiz: try again ❌";
+  } else {
+    $("#statusLine").textContent = "Quiz: pick an answer.";
+  }
+}
+
+function renderOrder(slideEl, slide){
+  const p = document.createElement("p");
+  p.className = "note";
+  p.textContent = slide.prompt;
+  slideEl.appendChild(p);
+
+  const saved = state.order[state.idx];
+  const current = saved?.currentOrder?.slice() || slide.items.slice();
+
+  const list = document.createElement("div");
+  list.id = "dragList";
+
+  current.forEach(text => {
+    const item = document.createElement("div");
+    item.className = "dragItem";
+    item.textContent = text;
+    list.appendChild(item);
+  });
+
+  enableDragSort(list);
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "btns";
+  const checkBtn = document.createElement("button");
+  checkBtn.className = "good";
+  checkBtn.textContent = "Check order";
+  const resetBtn = document.createElement("button");
+  resetBtn.textContent = "Reset";
+  btnRow.appendChild(checkBtn);
+  btnRow.appendChild(resetBtn);
+
+  slideEl.appendChild(list);
+  slideEl.appendChild(btnRow);
+
+  const feedback = document.createElement("div");
+  slideEl.appendChild(feedback);
+
+  function getOrder(){ return [...list.querySelectorAll(".dragItem")].map(x => x.textContent); }
+
+  checkBtn.addEventListener("click", () => {
+    const now = getOrder();
+    const correct = arraysEqual(now, slide.correctOrder);
+    state.order[state.idx] = { currentOrder: now, correct };
+    feedback.className = "feedback " + (correct ? "good" : "bad");
+    feedback.innerHTML = correct
+      ? `✅ Correct order. ${slide.explanation}`
+      : `❌ Not yet. Hint: start with AS-IS, then TO-BE.`;
+    $("#statusLine").textContent = correct ? "Activity: correct ✅" : "Activity: keep trying ❌";
+    saveState();
+  });
+
+  resetBtn.addEventListener("click", () => {
+    state.order[state.idx] = { currentOrder: slide.items.slice(), correct: false };
+    render();
+  });
+
+  if(saved?.correct){
+    feedback.className = "feedback good";
+    feedback.innerHTML = `✅ Completed. ${slide.explanation}`;
+    $("#statusLine").textContent = "Activity: completed ✅";
+  } else {
+    $("#statusLine").textContent = "Activity: drag items then check.";
+  }
+}
+
+/** ---------------------------------------------------------
+ *  Drag-sort (Pointer Events) — mobile Chrome solution
+ *  Keep original in DOM (hidden) and move it while dragging a ghost clone.
+ *  --------------------------------------------------------- */
+function enableDragSort(container){
+  if (container.dataset.dragSortBound === "1") return;
+  container.dataset.dragSortBound = "1";
+
+  let original = null;
+  let ghost = null;
+  let offsetY = 0;
+
+  container.style.touchAction = "none";
+
+  function listItems(){ return [...container.querySelectorAll(".dragItem")]; }
+
+  function onPointerDown(e){
+    const target = e.target.closest(".dragItem");
+    if(!target) return;
+
+    e.preventDefault();
+
+    original = target;
+
+    const rect = original.getBoundingClientRect();
+    offsetY = e.clientY - rect.top;
+
+    ghost = original.cloneNode(true);
+    ghost.classList.add("dragGhost");
+    ghost.style.left = rect.left + "px";
+    ghost.style.top  = rect.top + "px";
+    ghost.style.width = rect.width + "px";
+    document.body.appendChild(ghost);
+
+    original.style.visibility = "hidden";
+    moveGhost(e.clientY);
+  }
+
+  function moveGhost(clientY){
+    if(!ghost) return;
+    ghost.style.top = (clientY - offsetY) + "px";
+
+    const ghostRect = ghost.getBoundingClientRect();
+    const ghostMidY = ghostRect.top + ghostRect.height / 2;
+
+    let best = null;
+    let bestDist = Infinity;
+
+    for(const el of listItems()){
+      if(el === original) continue;
+      const r = el.getBoundingClientRect();
+      const mid = r.top + r.height / 2;
+      const d = Math.abs(mid - ghostMidY);
+      if(d < bestDist){
+        bestDist = d;
+        best = { el, mid };
+      }
+    }
+
+    if(best){
+      const insertAfter = ghostMidY > best.mid;
+      if(insertAfter){
+        if(best.el.nextSibling !== original){
+          container.insertBefore(original, best.el.nextSibling);
+        }
+      } else {
+        if(best.el !== original.nextSibling){
+          container.insertBefore(original, best.el);
+        }
+      }
+    }
+  }
+
+  function cleanup(){
+    if(!original) return;
+    original.style.visibility = "";
+    if(ghost){ ghost.remove(); ghost = null; }
+    original = null;
+  }
+
+  function onPointerMove(e){
+    if(!original || !ghost) return;
+    e.preventDefault();
+    moveGhost(e.clientY);
+  }
+
+  function onPointerUp(e){
+    if(!original) return;
+    e.preventDefault();
+    cleanup();
+  }
+
+  container.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("pointermove", onPointerMove, { passive:false });
+  window.addEventListener("pointerup", onPointerUp, { passive:false });
+  window.addEventListener("pointercancel", onPointerUp, { passive:false });
+}
+
+function arraysEqual(a,b){
+  if(a.length !== b.length) return false;
+  for(let i=0;i<a.length;i++) if(a[i] !== b[i]) return false;
+  return true;
+}
+
+/** ---------------------------------------------------------
+ *  4) Navigation + Hotkeys
+ *  --------------------------------------------------------- */
+function next(){ if(state.idx < lessonData.slides.length - 1){ state.idx++; render(); } }
+function prev(){ if(state.idx > 0){ state.idx--; render(); } }
+
+document.querySelector("#btnNext").addEventListener("click", next);
+document.querySelector("#btnPrev").addEventListener("click", prev);
+document.querySelector("#btnReset").addEventListener("click", resetState);
+
+document.querySelector("#btnExport").addEventListener("click", () => {
+  const exportObj = {
+    course: lessonData.courseTitle,
+    startedAt: state.startedAt,
+    currentSlide: state.idx + 1,
+    quiz: state.quiz,
+    order: state.order
+  };
+  const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "lecture_progress.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  document.querySelector("#statusLine").textContent = "Exported progress JSON.";
+});
+
+document.addEventListener("keydown", (e) => {
+  if(e.key === "ArrowRight") next();
+  if(e.key === "ArrowLeft") prev();
+});
+
+/** ---------------------------------------------------------
+ *  5) Start
+ *  --------------------------------------------------------- */
+render();
+</script>
+</body>
+</html>
